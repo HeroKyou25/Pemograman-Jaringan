@@ -6,6 +6,9 @@ import requests
 import asyncio
 from datetime import datetime
 import os
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 app = FastAPI()
 
@@ -15,6 +18,27 @@ os.makedirs("static", exist_ok=True)
 # folder static & templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+# ==== DATABASE SETUP ====
+DATABASE_URL = "sqlite:///./weather.db"
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class WeatherLog(Base):
+    """Model untuk menyimpan data cuaca"""
+    __tablename__ = "weather_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    city = Column(String, index=True)
+    temp = Column(Float)
+    feels_like = Column(Float)
+    humidity = Column(Integer)
+    description = Column(String)
+    logged_at = Column(DateTime, default=datetime.utcnow)
+
+# Buat tabel jika belum ada
+Base.metadata.create_all(bind=engine)
 
 # ==== KONFIGURASI CUACA ====
 WEATHER_API_KEY = "ca21257afebb7702df3c0497ccffa219"  # API key kamu
@@ -46,18 +70,47 @@ def log_api_call(endpoint: str, method: str = "GET", status: str = "success"):
     print(f"[{timestamp}] API Call #{api_call_count}: {method} {endpoint} - {status}")
     return log_entry
 
+def save_weather_to_db(city: str, temp: float, feels_like: float, humidity: int, description: str):
+    """Simpan data cuaca ke database"""
+    try:
+        db = SessionLocal()
+        weather_log = WeatherLog(
+            city=city,
+            temp=temp,
+            feels_like=feels_like,
+            humidity=humidity,
+            description=description
+        )
+        db.add(weather_log)
+        db.commit()
+        db.refresh(weather_log)
+        db.close()
+        return weather_log
+    except Exception as e:
+        print(f"Error saving to DB: {e}")
+        return None
+
 # =============================
 
 
 def format_weather(data: dict) -> dict:
     """Format JSON dari OpenWeather ke bentuk sederhana untuk frontend."""
     try:
+        temp = data["main"]["temp"]
+        feels_like = data["main"]["feels_like"]
+        humidity = data["main"]["humidity"]
+        description = data["weather"][0]["description"]
+        city = data.get("name")
+        
+        # Save ke database
+        save_weather_to_db(city, temp, feels_like, humidity, description)
+        
         return {
-            "city": data.get("name"),
-            "temp": data["main"]["temp"],
-            "feels_like": data["main"]["feels_like"],
-            "description": data["weather"][0]["description"],
-            "humidity": data["main"]["humidity"],
+            "city": city,
+            "temp": temp,
+            "feels_like": feels_like,
+            "description": description,
+            "humidity": humidity,
             "updated_at": datetime.now().strftime("%H:%M:%S"),
         }
     except Exception as e:
@@ -143,4 +196,39 @@ async def get_logs():
         "total_calls": api_call_count,
         "logs": api_call_logs
     })
+
+
+@app.get("/api/weather-history", response_class=JSONResponse)
+async def get_weather_history(limit: int = 100):
+    """
+    Endpoint untuk ambil riwayat data cuaca dari database.
+    Query params: limit (jumlah data terbaru, default 100)
+    """
+    try:
+        db = SessionLocal()
+        # Query data terbaru dengan limit
+        weather_history = db.query(WeatherLog).order_by(WeatherLog.logged_at.desc()).limit(limit).all()
+        db.close()
+        
+        # Format ke JSON
+        result = []
+        for log in weather_history:
+            result.append({
+                "id": log.id,
+                "city": log.city,
+                "temp": log.temp,
+                "feels_like": log.feels_like,
+                "humidity": log.humidity,
+                "description": log.description,
+                "logged_at": log.logged_at.strftime("%Y-%m-%d %H:%M:%S") if log.logged_at else None
+            })
+        
+        return JSONResponse(content={
+            "total": len(result),
+            "data": result
+        })
+    except Exception as e:
+        print(f"Error fetching weather history: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 

@@ -156,6 +156,124 @@
       color: #333;
       margin-top: 2px;
     }
+
+    /* Weather History Tab Styles */
+    .tabs-container {
+      width: 90%;
+      max-width: 900px;
+      margin-top: 30px;
+      margin-bottom: 30px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      border-bottom: 2px solid #ddd;
+    }
+
+    .tab-button {
+      padding: 10px 20px;
+      background: #f0f0f0;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      border-radius: 4px 4px 0 0;
+      transition: all 0.3s;
+    }
+
+    .tab-button.active {
+      background: #007bff;
+      color: white;
+      border-bottom: 3px solid #0056b3;
+    }
+
+    .tab-button:hover {
+      background: #e0e0e0;
+    }
+
+    .tab-button.active:hover {
+      background: #007bff;
+    }
+
+    .tab-content {
+      display: none;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 0 0 8px 8px;
+      padding: 20px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .history-table th {
+      background: #007bff;
+      color: white;
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #ddd;
+    }
+
+    .history-table td {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+    }
+
+    .history-table tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+
+    .history-table tr:hover {
+      background: #f0f0f0;
+    }
+
+    .history-table .empty {
+      text-align: center;
+      color: #999;
+      padding: 20px;
+    }
+
+    .history-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      align-items: center;
+    }
+
+    .history-controls input {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+
+    .history-controls button {
+      padding: 8px 16px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .history-controls button:hover {
+      background: #0056b3;
+    }
+
+    .history-info {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -191,6 +309,42 @@
     </div>
   </div>
 
+  <!-- Weather History Tab -->
+  <div class="tabs-container">
+    <div class="tabs">
+      <button class="tab-button active" data-tab="weather-history">📊 Weather History</button>
+    </div>
+
+    <!-- Weather History Tab -->
+    <div id="weather-history" class="tab-content active">
+      <div class="history-controls">
+        <input type="number" id="historyLimit" value="50" min="1" max="1000" placeholder="Limit data">
+        <button onclick="loadWeatherHistory()">Refresh Data</button>
+      </div>
+      <div class="history-info">
+        Total records: <span id="historyCount">0</span>
+      </div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Kota</th>
+            <th>Temp (°C)</th>
+            <th>Feels Like (°C)</th>
+            <th>Humidity (%)</th>
+            <th>Deskripsi</th>
+            <th>Logged At</th>
+          </tr>
+        </thead>
+        <tbody id="weatherHistoryBody">
+          <tr class="empty">
+            <td colspan="7">Loading data...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Leaflet JS -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -220,6 +374,44 @@
     function log(msg) {
       console.log(msg);
       debugEl.textContent = "Status: " + msg;
+    }
+
+    async function loadWeatherHistory() {
+      // Fetch weather history dari database dan tampilkan di tabel
+      try {
+        const limit = document.getElementById("historyLimit").value || 50;
+        const res = await fetch(`/api/weather-history?limit=${limit}`);
+        const data = await res.json();
+        
+        document.getElementById("historyCount").textContent = data.total;
+        const tbody = document.getElementById("weatherHistoryBody");
+        
+        if (data.total === 0) {
+          tbody.innerHTML = '<tr class="empty"><td colspan="7">Belum ada data cuaca tersimpan</td></tr>';
+          return;
+        }
+        
+        // Populate tabel dengan data
+        tbody.innerHTML = "";
+        data.data.forEach(item => {
+          const row = `
+            <tr>
+              <td>${item.id}</td>
+              <td>${item.city}</td>
+              <td>${item.temp}</td>
+              <td>${item.feels_like}</td>
+              <td>${item.humidity}</td>
+              <td>${item.description}</td>
+              <td>${item.logged_at}</td>
+            </tr>
+          `;
+          tbody.innerHTML += row;
+        });
+      } catch (e) {
+        console.error("Error loading weather history:", e);
+        document.getElementById("weatherHistoryBody").innerHTML = 
+          '<tr class="empty"><td colspan="7">Error loading data</td></tr>';
+      }
     }
 
     function addLogEntry(timestamp, endpoint, type = "api") {
@@ -380,6 +572,7 @@
       connectWebSocket(); // mode otomatis Pontianak dulu
       initMap();          // peta untuk pilih lokasi manual
       fetchAndUpdateLogs(); // initial load logs
+      loadWeatherHistory(); // initial load weather history
       // refresh logs setiap 5 detik
       setInterval(fetchAndUpdateLogs, 5000);
     });
