@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+.env
+weather.db
+.DS_Store
+*.db
+node_modules/
+.vercel/
+.pytest_cache/
+*.egg-info/
+dist/
+build/

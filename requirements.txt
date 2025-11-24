@@ -5,3 +5,4 @@ jinja2
 aiofiles
 websockets
 sqlalchemy
+python-dotenv

@@ -10,18 +10,30 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+# Load environment variables dari .env file (hanya untuk development)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 app = FastAPI()
 
-# pastikan folder static ada supaya tidak crash saat mounting
-os.makedirs("static", exist_ok=True)
+# pastikan folder static ada supaya tidak crash saat mounting (skip di Vercel karena read-only FS)
+if os.environ.get("VERCEL") != "1":
+    os.makedirs("static", exist_ok=True)
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# folder static & templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# folder templates
 templates = Jinja2Templates(directory="templates")
 
 # ==== DATABASE SETUP ====
-DATABASE_URL = "sqlite:///./weather.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Gunakan DATABASE_URL dari environment, atau default ke SQLite lokal
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./weather.db")
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -41,11 +53,11 @@ class WeatherLog(Base):
 Base.metadata.create_all(bind=engine)
 
 # ==== KONFIGURASI CUACA ====
-WEATHER_API_KEY = "ca21257afebb7702df3c0497ccffa219"  # API key kamu
+WEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "ca21257afebb7702df3c0497ccffa219")  # API key
 CITY = "Pontianak"    # kota default untuk mode WebSocket
 COUNTRY_CODE = "ID"   # kode negara
 UPDATE_INTERVAL = 10  # detik (interval update WebSocket)
-# ============================
+# =============================
 
 # ==== API CALL TRACKING ====
 api_call_count = 0
