@@ -67,7 +67,9 @@ def log_api_call(endpoint: str, method: str = "GET", status: str = "success"):
     """Log API call dengan timestamp"""
     global api_call_count, api_call_logs
     api_call_count += 1
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    import pytz
+    jakarta_tz = pytz.timezone("Asia/Jakarta")
+    timestamp = datetime.now(jakarta_tz).strftime("%H:%M:%S")
     log_entry = {
         "id": api_call_count,
         "timestamp": timestamp,
